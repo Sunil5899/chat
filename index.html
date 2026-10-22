@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Two Way Chat</title>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #dfe5e7;
+}
+
+.app {
+    max-width: 500px;
+    height: 100dvh;
+    margin: auto;
+    background: white;
+    display: flex;
+    flex-direction: column;
+}
+
+header {
+    background: #075e54;
+    color: white;
+    padding: 18px;
+    font-size: 22px;
+    font-weight: bold;
+}
+
+#login { padding: 20px; }
+
+input, button {
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 8px;
+}
+
+#username, #room {
+    width: 100%;
+    border: 1px solid #ccc;
+    margin: 6px 0;
+}
+
+button {
+    border: none;
+    background: #128c7e;
+    color: white;
+    cursor: pointer;
+}
+
+#join { width: 100%; margin-top: 8px; }
+
+#chat {
+    display: none;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+}
+
+#status {
+    padding: 10px;
+    background: #f7f7f7;
+    font-size: 13px;
+}
+
+#messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px;
+    background: #efeae2;
+}
+
+.message {
+    background: white;
+    padding: 10px;
+    margin: 8px 0;
+    border-radius: 10px;
+    max-width: 85%;
+    overflow-wrap: anywhere;
+}
+
+.mine {
+    background: #d9fdd3;
+    margin-left: auto;
+}
+
+.sender {
+    color: #075e54;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+.time {
+    color: #666;
+    text-align: right;
+    font-size: 11px;
+    margin-top: 5px;
+}
+
+#form {
+    display: flex;
+    gap: 8px;
+    padding: 10px;
+}
+
+#text {
+    flex: 1;
+    min-width: 0;
+    border: 1px solid #ccc;
+}
+</style>
+</head>
+
+<body>
+<div class="app">
+
+<header>💬 Two Way Chat</header>
+
+<div id="login">
+    <h3>चैट शुरू करें</h3>
+    <input id="username" placeholder="अपना नाम" maxlength="30">
+    <input id="room" placeholder="Room ID" maxlength="40">
+    <button id="join">चैट में जुड़ें</button>
+    <p>दोनों मोबाइल में एक ही Room ID डालें।</p>
+</div>
+
+<div id="chat">
+    <div id="status">कनेक्ट हो रहा है...</div>
+    <div id="messages"></div>
+
+    <form id="form">
+        <input id="text" placeholder="मैसेज लिखें..." maxlength="2000" required>
+        <button type="submit">भेजें</button>
+    </form>
+</div>
+
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+
+let ws;
+let myName = "";
+let myRoom = "";
+let joined = false;
+
+$("join").onclick = () => {
+    myName = $("username").value.trim();
+    myRoom = $("room").value.trim();
+
+    if (!myName || !myRoom) {
+        alert("अपना नाम और Room ID भरें।");
+        return;
+    }
+
+    if (!/^[a-zA-Z0-9_-]{3,40}$/.test(myRoom)) {
+        alert("Room ID में अंग्रेजी अक्षर, अंक, _ या - लिखें।");
+        return;
+    }
+
+    $("join").disabled = true;
+
+    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(protocol + "//" + location.host);
+
+    ws.onopen = () => {
+        ws.send(JSON.stringify({
+            type: "join",
+            username: myName,
+            room: myRoom
+        }));
+    };
+
+    ws.onmessage = event => {
+        const data = JSON.parse(event.data);
+
+        if (data.type === "status") {
+            joined = true;
+            $("login").style.display = "none";
+            $("chat").style.display = "flex";
+            $("status").textContent = "Room: " + myRoom;
+            return;
+        }
+
+        if (data.type === "chat") {
+            const box = document.createElement("div");
+            box.className = "message" +
+                (data.username === myName ? " mine" : "");
+
+            const sender = document.createElement("div");
+            sender.className = "sender";
+            sender.textContent = data.username;
+
+            const content = document.createElement("div");
+            content.textContent = data.text;
+
+            const time = document.createElement("div");
+            time.className = "time";
+            time.textContent = data.time;
+
+            box.append(sender, content, time);
+            $("messages").appendChild(box);
+            $("messages").scrollTop = $("messages").scrollHeight;
+        }
+    };
+
+    ws.onerror = () => {
+        $("status").textContent = "कनेक्शन में समस्या है।";
+        $("join").disabled = false;
+    };
+
+    ws.onclose = () => {
+        joined = false;
+        $("join").disabled = false;
+        $("status").textContent = "कनेक्शन बंद हो गया।";
+    };
+};
+
+$("form").onsubmit = event => {
+    event.preventDefault();
+
+    const text = $("text").value.trim();
+
+    if (!joined || !ws || ws.readyState !== WebSocket.OPEN || !text) {
+        return;
+    }
+
+    ws.send(JSON.stringify({ type: "chat", text }));
+    $("text").value = "";
+};
+</script>
+</body>
+</html>
